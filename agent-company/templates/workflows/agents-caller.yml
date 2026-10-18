@@ -1,0 +1,31 @@
+# project-x/.github/workflows/agents.yml
+# Thin caller. All logic lives in the hq repo. Pin hq by tag or SHA.
+name: agents
+on:
+  push:
+    branches: [main]
+    paths: ["openspec/changes/**"]
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: agents-${{ github.repository }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  spec-sync:
+    if: github.event_name == 'push'
+    uses: <owner>/hq/.github/workflows/reusable-spec-sync.yml@<tag-or-SHA>
+    with:
+      openspec_version: "<exact-version>"
+    secrets: inherit
+
+  dispatch:
+    if: github.event_name != 'push'
+    uses: <owner>/hq/.github/workflows/reusable-dispatch-and-run.yml@<tag-or-SHA>
+    with:
+      openspec_version: "<exact-version>"
+      max_turns: 30
+      allowed_tools: "Read,Edit,Write,Glob,Grep,Bash(./mvnw:*),Bash(openspec:*),Bash(git:*),Bash(gh pr:*),Bash(gh issue comment:*),Bash(gh issue edit:*)"
+    secrets: inherit

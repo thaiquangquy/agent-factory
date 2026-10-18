@@ -1,0 +1,22 @@
+# portfolio.yml — every project the factory works on.
+# Read by: C-00 chief-engineer, P-01, the dispatcher, the sprint reporter.
+# autonomy and auto_merge here override any label on a PR (see kb/KB-risk-policy.md).
+# Connectors: kb/KB-connector-contract.md (only `github` is implemented).
+
+projects:
+  - id: modern-java
+    repo: thaiquangquy/ModernJava        # fork; NEVER target upstream bowbahdoe/ModernJava
+    local_path: ~/workspace/quy/ModernJava
+    connector: github
+    type: content                        # mdBook, markdown only
+    base_branch: develop                 # agents branch from and merge into develop
+    deploy_branch: master                # push to master deploys GitHub Pages: owner only
+    autonomy: L2                         # target L3 after 2 sprints meeting the exit criteria
+    auto_merge: risk_low_only            # into base_branch only
+    budget_usd_per_sprint: 15
+    max_turns: 15
+    gates:                               # commands: kb/KB-tech-stack.md#modern-java
+      - mdbook-build
+      - summary-lists-new-pages
+      - markdownlint
+      - languagetool

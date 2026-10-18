@@ -1,0 +1,52 @@
+# project-x/.github/workflows/openspec-gates.yml
+# SKELETON. Blocking OpenSpec gates. Add as required status checks.
+name: openspec-gates
+on:
+  pull_request:
+
+permissions: { contents: read }
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@<SHA>
+        with: { fetch-depth: 0 }
+      - run: npm ci   # OpenSpec is pinned in package.json devDependencies
+
+      - name: Validate all specs and changes
+        run: npx openspec validate --all --strict
+
+      - name: Archive check (agent PRs only)
+        if: startsWith(github.head_ref, 'agent/')
+        run: |
+          set -euo pipefail
+          id="${GITHUB_HEAD_REF#agent/}"
+          base="origin/${{ github.base_ref }}"
+
+          # 1. The change folder must be gone from openspec/changes/
+          if [ -d "openspec/changes/$id" ]; then
+            echo "::error::Change $id is not archived. Run: openspec archive $id --yes"; exit 1
+          fi
+          # 2. An archive folder for this change must exist
+          ls -d openspec/changes/archive/*-"$id" >/dev/null 2>&1 \
+            || { echo "::error::No archive folder for $id"; exit 1; }
+          # 3. Living specs must have changed (protects against silent spec drop)
+          if git diff --quiet "$base"...HEAD -- openspec/specs/; then
+            echo "::error::openspec/specs/ did not change. Spec deltas were not applied."; exit 1
+          fi
+
+  risk-high-needs-approval:
+    # Required check. Fails while a risk:high PR has no approval from Quy.
+    # Re-run on pull_request_review (add that trigger in the caller).
+    if: contains(github.event.pull_request.labels.*.name, 'risk:high')
+    runs-on: ubuntu-latest
+    permissions: { pull-requests: read }
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          approved=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+            --jq '[.[] | select(.state=="APPROVED" and .user.login=="<your-login>")] | length')
+          [ "$approved" -gt 0 ] || { echo "::error::risk:high needs approval from Quy"; exit 1; }

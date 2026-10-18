@@ -1,0 +1,9 @@
+# openspec/changes/<change-id>/agent.yml
+# Our metadata. Kept outside .openspec.yaml so OpenSpec upgrades do not break it.
+initiative: 2026-Q4-platform-hardening   # id from hq/initiatives/, or "maintenance"
+priority: p1          # p0 | p1 | p2 | p3
+risk: high            # low | high  (hq/rules/risk-policy.md; agents may raise, never lower)
+type: code            # code | content
+estimate: m           # s | m | l
+depends_on: []        # other change ids that must merge first
+requested_by: quy

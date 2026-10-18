@@ -1,0 +1,73 @@
+# hq/.github/workflows/reusable-spec-sync.yml
+# SKELETON. Read every line before you use it. Replace <...> values.
+# Creates 1 GitHub Issue per new OpenSpec change. Idempotent (label change:<id>).
+name: reusable-spec-sync
+on:
+  workflow_call:
+    inputs:
+      openspec_version: { type: string, required: true }
+    secrets:
+      APP_ID: { required: true }
+      APP_PRIVATE_KEY: { required: true }
+
+jobs:
+  sync:
+    if: vars.AGENTS_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<SHA>
+
+      # GitHub App token: issues created with it can trigger other workflows.
+      - id: app
+        uses: actions/create-github-app-token@<SHA>
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - run: npm i -g @fission-ai/openspec@${{ inputs.openspec_version }}
+
+      - name: Create issues for new changes
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for dir in openspec/changes/*/; do
+            id=$(basename "$dir")
+            [ "$id" = "archive" ] && continue
+
+            openspec validate "$id" --strict
+
+            # Skip if an issue already exists (open or closed)
+            if [ "$(gh issue list --state all --label "change:$id" --json number --jq length)" != "0" ]; then
+              echo "skip $id"; continue
+            fi
+
+            meta="$dir/agent.yml"
+            prio=$(yq '.priority // "p2"' "$meta")
+            risk=$(yq '.risk // "high"' "$meta")     # default high = safe
+            type=$(yq '.type // "code"' "$meta")
+            init=$(yq '.initiative // "maintenance"' "$meta")
+            title=$(head -n 1 "$dir/proposal.md" | sed 's/^# *//')
+
+            for l in agent-ready "priority:$prio" "risk:$risk" "type:$type" "change:$id"; do
+              gh label create "$l" --force >/dev/null
+            done
+
+            gh issue create \
+              --title "[$id] $title" \
+              --label agent-ready --label "priority:$prio" --label "risk:$risk" \
+              --label "type:$type" --label "change:$id" \
+              --body "Change: \`openspec/changes/$id/\`
+          Initiative: $init
+
+          Acceptance: every scenario in the spec deltas has a passing test; tasks.md is fully checked; change is archived with the openspec CLI.
+
+          Do not copy the spec here. Read the change folder."
+          done
+
+      # TODO: add the issue to the org Project board and set fields
+      # (gh project item-add + gh project item-edit), using the App token.

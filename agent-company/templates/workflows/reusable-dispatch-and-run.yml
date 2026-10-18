@@ -1,0 +1,119 @@
+# hq/.github/workflows/reusable-dispatch-and-run.yml
+# SKELETON. Read every line before you use it. Replace <...> values.
+# Called by a cron caller in each project repo (every 30 min).
+# Picks the top agent-ready issue and runs claude-code-action on it.
+name: reusable-dispatch-and-run
+on:
+  workflow_call:
+    inputs:
+      openspec_version: { type: string, required: true }
+      max_turns:        { type: number, default: 30 }
+      allowed_tools:    { type: string, required: true }   # project-specific allow-list
+      daily_run_limit:  { type: number, default: 10 }
+    secrets:
+      ANTHROPIC_API_KEY: { required: true }
+      APP_ID: { required: true }
+      APP_PRIVATE_KEY: { required: true }
+
+jobs:
+  pick:
+    if: vars.AGENTS_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read }
+    outputs:
+      issue:  ${{ steps.pick.outputs.issue }}
+      change: ${{ steps.pick.outputs.change }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@<SHA>
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - id: pick
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # 1 agent per repo
+          if [ "$(gh issue list --label agent-running --json number --jq length)" != "0" ]; then
+            echo "busy"; exit 0
+          fi
+          # Daily run limit (counts issues that started today)
+          today=$(date -u +%F)
+          started=$(gh issue list --state all --label agent-started-$today --json number --jq length 2>/dev/null || echo 0)
+          if [ "$started" -ge "${{ inputs.daily_run_limit }}" ]; then echo "limit"; exit 0; fi
+
+          # TODO: sprint budget check (read hq/portfolio.yml + spend source)
+          # TODO: skip issues whose agent.yml depends_on has open changes
+
+          # Highest priority first (p0 < p3), then oldest
+          read -r issue change < <(gh issue list --label agent-ready --json number,createdAt,labels --limit 100 --jq '
+            map({n: .number, c: .createdAt,
+                 p: ([.labels[].name | select(startswith("priority:"))][0] // "priority:p2"),
+                 ch: ([.labels[].name | select(startswith("change:"))][0] // "" | sub("change:"; ""))})
+            | sort_by(.p, .c) | .[0] // empty | "\(.n) \(.ch)"') || true
+
+          [ -z "${issue:-}" ] && { echo "queue empty"; exit 0; }
+
+          gh label create "agent-started-$today" --force >/dev/null
+          gh issue edit "$issue" --remove-label agent-ready --add-label agent-running --add-label "agent-started-$today"
+          echo "issue=$issue"   >> "$GITHUB_OUTPUT"
+          echo "change=$change" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: pick
+    if: needs.pick.outputs.issue != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@<SHA>
+        with: { fetch-depth: 0 }
+
+      # PRs opened with GITHUB_TOKEN do NOT trigger your CI. Use the App token.
+      - id: app
+        uses: actions/create-github-app-token@<SHA>
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - run: npm i -g @fission-ai/openspec@${{ inputs.openspec_version }}
+
+      - uses: anthropics/claude-code-action@<SHA>   # >= v1.0.94
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app.outputs.token }}
+          claude_args: >-
+            --max-turns ${{ inputs.max_turns }}
+            --allowedTools "${{ inputs.allowed_tools }}"
+          prompt: |
+            Implement OpenSpec change ${{ needs.pick.outputs.change }} for issue #${{ needs.pick.outputs.issue }}.
+            1. Run /opsx:apply ${{ needs.pick.outputs.change }}. Complete every task in tasks.md.
+            2. Every scenario in the spec deltas needs at least one automated test named after the scenario.
+            3. Run the project lint and unit tests. Fix failures.
+            4. Run: openspec validate ${{ needs.pick.outputs.change }} --strict
+            5. Run the CLI (not the archive skill): openspec archive ${{ needs.pick.outputs.change }} --yes
+            6. Open a PR on branch agent/${{ needs.pick.outputs.change }}.
+               Title: "[${{ needs.pick.outputs.change }}] <summary>". Body starts with "Closes #${{ needs.pick.outputs.issue }}".
+               Include: what changed, test results, scenarios covered (scenario -> test name), open risks.
+               Copy the risk:* and change:* labels from the issue to the PR.
+            If the spec is wrong or unclear: do not change the intent. Comment on the issue, add label needs-human, and stop.
+
+      - name: Release the slot on failure
+        if: failure() || cancelled()
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh issue edit ${{ needs.pick.outputs.issue }} --remove-label agent-running --add-label needs-human
+          gh issue comment ${{ needs.pick.outputs.issue }} --body "Agent run failed or timed out: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+# Note: remove agent-running from the issue when the agent PR OPENS
+# (small workflow on pull_request: opened). If you wait for merge,
+# one risk:high PR in review blocks the whole repo queue.
