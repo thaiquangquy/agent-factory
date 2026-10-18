@@ -52,8 +52,8 @@ Exit criteria to move a project up one level: agent-company/01. Never L5.
 |---|---|---|
 | `kb/KB-connector-contract.md` | ✅ v1.0 (github) | Verify every `gh` command on the pilot |
 | `kb/KB-risk-policy.md` | ✅ v1.0 | Owner review |
-| `kb/KB-workflow-conventions.md` | ✅ v2.0 (github) | Create the labels in the pilot repo |
-| `kb/KB-tech-stack.md` | ✅ modern-java added | Confirm the markdownlint command |
+| `kb/KB-workflow-conventions.md` | ✅ v2.0 (github) | — (labels created in the pilot) |
+| `kb/KB-tech-stack.md` | ✅ modern-java added | — (markdownlint runs on changed `src/` pages in CI) |
 | `kb/KB-definition-of-done.md` | ✅ v2.0 | — |
 | `kb/KB-context-handoff-contract.md` | ✅ v2.0 | — |
 | `kb/KB-tdd-protocol.md` | ✅ v1.1 | — |
@@ -74,9 +74,11 @@ Exit criteria to move a project up one level: agent-company/01. Never L5.
 
 **Infrastructure (you build this):**
 
-- [ ] Pilot repo (`thaiquangquy/ModernJava`): `openspec init --tools claude`, pinned OpenSpec in `package.json`, first living specs via `/opsx:onboard`
-- [ ] Labels from KB-workflow-conventions in the pilot repo
-- [ ] Phase 0 guardrails from agent-company/09 (actor check, pinned SHAs, kill switch, spend limit)
+- [x] Pilot repo (`thaiquangquy/ModernJava`): `openspec init --tools claude`, OpenSpec 1.14.0 pinned in `package.json`, gates `content-gates.yml` + `openspec-gates.yml` ([thaiquangquy/ModernJava#1](https://github.com/thaiquangquy/ModernJava/pull/1), into `develop`)
+- [ ] First living specs via `/opsx:onboard` (owner reviews) and 2 changes by hand (Phase 2 exit)
+- [x] Labels from KB-workflow-conventions in the pilot repo (13 labels; `change:<id>` per change)
+- [ ] Phase 0 guardrails from agent-company/09: done — kill switch (`AGENTS_ENABLED`), SHA-pinned actions in new workflows, CODEOWNERS on `.github/`, Issues on, `develop` protection (5 required checks, CODEOWNERS review, no force push; admins can bypass). Open — Anthropic Console spend limit (owner); actor check, claude-code-action SHA and `--allowedTools` come with the first agent workflow (Phase 4)
+- [ ] Phase 1 control plane gaps: `VISION.md` + initiatives, `company-core` plugin + marketplace file, GitHub Projects board
 - [ ] Run the pipeline locally (README → "Running locally") — workflows come in Milestone 3
 
 ### Pass criteria
@@ -288,7 +290,7 @@ These constraints are invariants. Any milestone that violates them is going back
 
 | Milestone | Status | Blocking item |
 |---|---|---|
-| Milestone 1 | 🟡 In progress | Docs moved to OpenSpec + GitHub. Next: OpenSpec init + labels in the modern-java pilot (agent-company/09 Phase 0–2) |
+| Milestone 1 | 🟡 In progress | Pilot set up (OpenSpec, labels, gates; 09 Phase 0–2). Next: merge ModernJava#1, console spend limit, `/opsx:onboard` + 2 hand changes, Phase 1 gaps (VISION.md, plugin, board) |
 | Milestone 2 | ⬜ Not started | Milestone 1 pass criteria not yet met |
 | Milestone 3 | ⬜ Not started | Milestone 2 pass criteria not yet met |
 | Milestone 4 | ⬜ Not started | Milestone 3 pass criteria not yet met |
@@ -296,4 +298,4 @@ These constraints are invariants. Any milestone that violates them is going back
 ---
 
 *Update the Current Status table as milestones are completed.*
-*Last updated: 2026-10-13*
+*Last updated: 2026-10-18*
